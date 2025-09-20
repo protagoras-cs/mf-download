@@ -9,7 +9,7 @@
 # GitHub: https://github.com/protagoras-cs/mf-download
 #####################################################################
 
-VERSION="1.0.0"
+VERSION="1.0.1"
 
 # Colors for better output
 RED='\033[0;31m'
@@ -66,6 +66,10 @@ check_dependencies() {
         exit 1
     fi
 }
+
+# Global options
+QUIET_MODE=false
+VERBOSE_MODE=false
 
 # Main download function
 mf_download() {
@@ -135,11 +139,21 @@ mf_download() {
     print_info "Starting download..."
     
     if command -v aria2c &> /dev/null; then
-        print_info "Using aria2c for faster download (6 parallel connections)"
-        aria2c -x 6 -s 6 --summary-interval=5 --download-result=hide "$real_url"
+        if [ "$QUIET_MODE" = true ]; then
+            print_info "Using aria2c (quiet mode)"
+            aria2c -x 6 -s 6 -q "$real_url"
+        else
+            print_info "Using aria2c for faster download (6 parallel connections)"
+            aria2c -x 6 -s 6 --console-log-level=warn --summary-interval=0 "$real_url"
+        fi
     else
-        print_info "Using wget for download"
-        wget -c --progress=bar:force "$real_url"
+        if [ "$QUIET_MODE" = true ]; then
+            print_info "Using wget (quiet mode)"
+            wget -c -q --show-progress "$real_url"
+        else
+            print_info "Using wget for download"
+            wget -c --progress=bar:force "$real_url"
+        fi
     fi
     
     if [ $? -eq 0 ]; then
@@ -164,6 +178,8 @@ show_help() {
     echo "Options:"
     echo "  -h, --help     Show this help message"
     echo "  -v, --version  Show version information"
+    echo "  -q, --quiet    Quiet mode (minimal output)"
+    echo "  -V, --verbose  Verbose mode (detailed output)"
     echo ""
     echo "Examples:"
     echo "  $0 \"https://www.mediafire.com/file/abc123/filename.zip/file\""
@@ -182,28 +198,49 @@ show_version() {
 
 # Main execution
 main() {
-    case "$1" in
-        -h|--help)
-            show_help
-            exit 0
-            ;;
-        -v|--version)
-            show_version
-            exit 0
-            ;;
-        "")
-            print_header
-            print_error "No URL provided"
-            echo ""
-            show_help
-            exit 1
-            ;;
-        *)
-            print_header
-            check_dependencies
-            mf_download "$1"
-            ;;
-    esac
+    # Parse options
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -v|--version)
+                show_version
+                exit 0
+                ;;
+            -q|--quiet)
+                QUIET_MODE=true
+                shift
+                ;;
+            -V|--verbose)
+                VERBOSE_MODE=true
+                shift
+                ;;
+            -*)
+                print_error "Unknown option: $1"
+                exit 1
+                ;;
+            *)
+                # This is the URL
+                if [ "$QUIET_MODE" = false ]; then
+                    print_header
+                fi
+                check_dependencies
+                mf_download "$1"
+                exit 0
+                ;;
+        esac
+    done
+    
+    # No URL provided
+    if [ "$QUIET_MODE" = false ]; then
+        print_header
+    fi
+    print_error "No URL provided"
+    echo ""
+    show_help
+    exit 1
 }
 
 # If script is being sourced, just define the function
